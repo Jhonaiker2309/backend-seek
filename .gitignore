@@ -1,0 +1,6 @@
+.aws-sam
+.env
+lambda-deployment-package.zip
+env.json
+package
+venv/

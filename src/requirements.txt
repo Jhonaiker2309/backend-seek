@@ -1,0 +1,11 @@
+pytest
+fastapi
+PyJWT
+pydantic
+pydantic[email]
+bcrypt
+pymongo
+python-dotenv
+pytest-mock
+mangum
+bcrypt

@@ -1,0 +1,241 @@
+openapi: 3.0.0
+info:
+  title: Task Manager API
+  version: 1.0.0
+  description: API for managing user authentication and tasks.
+servers:
+  - url: http://localhost:8000 # Example for local development
+    description: Development server
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegisterSchema'
+      responses:
+        '201':
+          description: User created successfully. Returns user email and JWT token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponseSchema'
+
+  /auth/login:
+    post:
+      summary: Log in a user
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginSchema'
+      responses:
+        '200':
+          description: Login successful. Returns user email and JWT token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponseSchema'
+
+  /tasks:
+    get:
+      summary: Get all tasks for the authenticated user
+      tags:
+        - Tasks
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: A list of tasks for the user.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskResponseSchema'
+    post:
+      summary: Create a new task for the authenticated user
+      tags:
+        - Tasks
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreateSchema'
+      responses:
+        '201':
+          description: Task created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponseSchema'
+
+  /tasks/{task_id}:
+    put:
+      summary: Update an existing task
+      tags:
+        - Tasks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task to update.
+          schema:
+            type: string
+            example: "60d5ecf3a3b4b5b6c7d8e9f0"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdateSchema'
+      responses:
+        '200':
+          description: Task updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponseSchema'
+    delete:
+      summary: Delete a task
+      tags:
+        - Tasks
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: The ID of the task to delete.
+          schema:
+            type: string
+            example: "60d5ecf3a3b4b5b6c7d8e9f0"
+      responses:
+        '204':
+          description: Task deleted successfully. No content returned.
+
+components:
+  schemas:
+    # --- Authentication Schemas ---
+    UserRegisterSchema:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 6 # Based on your schema
+          example: SecurePass123
+
+    UserLoginSchema:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: SecurePass123
+
+    AuthResponseSchema:
+      type: object
+      required:
+        - email
+        - token
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    # --- Task Schemas ---
+    TaskBaseSchema:
+      type: object
+      required:
+        - title
+        - status
+      properties:
+        title:
+          type: string
+          minLength: 3
+          example: "Comprar leche"
+        description:
+          type: string
+          nullable: true
+          example: "2 litros"
+        status:
+          type: string
+          enum: [pending, in_progress, completed]
+          default: pending
+          example: "pending"
+
+    TaskCreateSchema:
+      allOf:
+        - $ref: '#/components/schemas/TaskBaseSchema'
+
+    TaskUpdateSchema:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 3
+          nullable: true
+          example: "Comprar pan integral"
+        description:
+          type: string
+          nullable: true
+          example: "En la panadería de la esquina"
+        status:
+          type: string
+          enum: [pending, in_progress, completed]
+          nullable: true
+          example: "in_progress"
+
+    TaskResponseSchema:
+      allOf:
+        - $ref: '#/components/schemas/TaskBaseSchema'
+      type: object
+      required:
+        - id
+        - title
+        - status
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the task (usually MongoDB ObjectId as string)
+          example: "60d5ecf3a3b4b5b6c7d8e9f0"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login or register endpoints. Use 'Bearer {token}' in the Authorization header.

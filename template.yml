@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Backend API for Task Manager application (FastAPI single function)
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+    Environment:
+      Variables:
+        MONGO_URI: '{{resolve:secretsmanager:prod/task-manager/mongo-config:SecretString:MONGO_URI}}'
+        DATABASE_NAME: '{{resolve:secretsmanager:prod/task-manager/mongo-config:SecretString:DATABASE_NAME}}'
+        JWT_SECRET: '{{resolve:secretsmanager:prod/task-manager/auth-config:SecretString:JWT_SECRET}}'
+        API_GATEWAY_BASE_PATH: '/dev'
+
+  Api:
+    Cors:
+      AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Forwarded-Proto,X-Forwarded-Port,X-Forwarded-For'"
+      AllowOrigin: "'*'"
+
+Resources:
+  TaskManagerAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: dev
+
+  FastApiAppFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      VpcConfig:
+        SubnetIds:
+          - subnet-09d8aedfc20642ecb
+        SecurityGroupIds:
+          - sg-0dded74782e3d7792
+      Policies: # Mueve Policies aquí
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:prod/task-manager/*'
+      Events:
+        ApiProxyEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref TaskManagerAPI
+    Metadata:
+      DockerTag: python3.10-v1
+      Dockerfile: Dockerfile
+      DockerContext: .
+
+Outputs:
+  TaskManagerApiEndpoint:
+    Description: "API Gateway endpoint URL for Dev stage"
+    Value: !Sub "https://${TaskManagerAPI}.execute-api.${AWS::Region}.amazonaws.com/dev"
