@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: API for managing user authentication and tasks.
 servers:
-  - url: http://localhost:8000 # Example for local development
+  - url: http://localhost:8000
     description: Development server
 
 paths:
