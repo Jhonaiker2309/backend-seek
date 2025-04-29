@@ -1,7 +1,7 @@
 from typing import List
 from ..entities.task import Task
 from ..repositories.task_repository import TaskRepository
-from ..exceptions.task_errors import TaskNotFoundError
+from ..exceptions.task_errors import TaskNotFoundError, TaskPermissionError
 
 class TaskService:
     """
@@ -63,7 +63,7 @@ class TaskService:
         """
         return self.repository.get_user_tasks(user_email)
 
-    def update_task(self, task_id: str, updates: dict) -> Task:
+    def update_task(self, task_id: str, updates: dict, user_email: str) -> Task:
         """
         Updates a task with the given updates.
 
@@ -80,12 +80,15 @@ class TaskService:
         task = self.repository.get_task_by_id(task_id)
         if not task:
             raise TaskNotFoundError()
+        if task.user_email != user_email:
+            raise TaskPermissionError()
         updated_task = self.repository.update_task(task_id, updates)
         if not updated_task:
             raise TaskNotFoundError()
         return updated_task
 
-    def delete_task(self, task_id: str) -> bool:
+
+    def delete_task(self, task_id: str, user_email: str) -> bool:
         """
         Deletes a task by its ID.
 
@@ -101,4 +104,6 @@ class TaskService:
         task = self.repository.get_task_by_id(task_id)
         if not task:
             raise TaskNotFoundError()
+        if task.user_email != user_email:
+            raise TaskPermissionError()
         return self.repository.delete_task(task_id)

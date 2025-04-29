@@ -15,8 +15,8 @@ Globals:
         API_GATEWAY_BASE_PATH: '{{resolve:secretsmanager:prod/task-manager/mongo-config:SecretString:API_GATEWAY_BASE_PATH}}'
   Api:
     Cors:
-      AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Forwarded-Proto,X-Forwarded-Port,X-Forwarded-For'"
+      AllowMethods: "'*'"
+      AllowHeaders: "'*'"
       AllowOrigin: "'*'"
 
 Resources:

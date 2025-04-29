@@ -1,20 +1,19 @@
 import json
 import logging
-from typing import List, Optional
+from typing import List
 from fastapi import FastAPI, Request, Response, HTTPException, status, Path, Body, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, Field, EmailStr
 from bson import ObjectId
+
+from api.handlers import auth_handlers, task_handlers
 from api.schemas.auth_schemas import UserRegisterSchema, UserLoginSchema, AuthResponseSchema, ErrorDetailSchema
 from api.schemas.task_schemas import TaskResponseSchema, TaskCreateSchema, TaskUpdateSchema
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Security scheme for Swagger
 security_scheme = HTTPBearer()
 
 app = FastAPI(
@@ -27,12 +26,11 @@ app = FastAPI(
         },
         {
             "name": "Tasks",
-            "description": "Operations with user tasks",
+            "description": "Operations on user tasks",
         },
-    ],
+    ]
 )
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,7 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Models ---
 class PyObjectId(ObjectId):
     @classmethod
     def __get_validators__(cls):
@@ -59,8 +56,8 @@ class PyObjectId(ObjectId):
         json_schema.update(type="string", format="objectid", example="60d5ecf3a3b4b5b6c7d8e9f0")
         return json_schema
 
-# --- Helper Functions ---
 def process_handler_response(result: dict, success_status: int = status.HTTP_200_OK) -> Response:
+    """Processes the dictionary response from handlers into a FastAPI Response."""
     status_code = result.get('statusCode', status.HTTP_500_INTERNAL_SERVER_ERROR)
     headers = result.get('headers', {})
     body_str = result.get('body')
@@ -72,23 +69,22 @@ def process_handler_response(result: dict, success_status: int = status.HTTP_200
         body_data = json.loads(body_str) if body_str else {}
         return JSONResponse(content=body_data, status_code=status_code, headers=headers)
     except (json.JSONDecodeError, TypeError) as e:
-        logger.error(f"Response parsing error: {e}")
+        logger.error(f"Error parsing handler response: {e}")
         return JSONResponse(
-            content={"detail": "Internal response format error"},
+            content={"detail": "Internal error in response format"},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             headers=headers
         )
 
-# --- Exception Handling ---
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """Handles any unhandled exceptions."""
     logger.exception(f"Unhandled error: {exc}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error"}
     )
 
-# --- Authentication Routes ---
 @app.post(
     "/auth/register",
     status_code=status.HTTP_201_CREATED,
@@ -100,8 +96,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     }
 )
 async def register_user(user_data: UserRegisterSchema):
+    """Registers a new user."""
     try:
-        event = {"body": user_data.json()}
+        event = {"body": user_data.model_dump_json()}
         result = auth_handlers.register_user(event, {})
         return process_handler_response(result, status.HTTP_201_CREATED)
     except Exception as e:
@@ -118,15 +115,15 @@ async def register_user(user_data: UserRegisterSchema):
     }
 )
 async def login_user(credentials: UserLoginSchema):
+    """Logs in a user."""
     try:
-        event = {"body": credentials.json()}
+        event = {"body": credentials.model_dump_json()}
         result = auth_handlers.login_user(event, {})
         return process_handler_response(result)
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise HTTPException(status_code=500, detail="Login failed")
 
-# --- Task Routes ---
 @app.get(
     "/tasks",
     tags=["Tasks"],
@@ -138,13 +135,14 @@ async def login_user(credentials: UserLoginSchema):
     dependencies=[Depends(security_scheme)]
 )
 async def get_tasks(request: Request):
+    """Gets all tasks for the authenticated user."""
     try:
         event = {"headers": dict(request.headers)}
         result = task_handlers.get_tasks(event, {})
         return process_handler_response(result)
     except Exception as e:
-        logger.error(f"Get tasks error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve tasks")
+        logger.error(f"Error getting tasks: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get tasks")
 
 @app.post(
     "/tasks",
@@ -159,16 +157,17 @@ async def get_tasks(request: Request):
     dependencies=[Depends(security_scheme)]
 )
 async def create_task(request: Request, task_data: TaskCreateSchema):
+    """Creates a new task for the authenticated user."""
     try:
         event = {
-            "body": task_data.json(),
+            "body": task_data.model_dump_json(),
             "headers": dict(request.headers)
         }
         result = task_handlers.create_task(event, {})
         return process_handler_response(result, status.HTTP_201_CREATED)
     except Exception as e:
-        logger.error(f"Create task error: {e}")
-        raise HTTPException(status_code=500, detail="Task creation failed")
+        logger.error(f"Error creating task: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create task")
 
 @app.put(
     "/tasks/{task_id}",
@@ -189,15 +188,15 @@ async def update_task(
 ):
     try:
         event = {
-            "body": task_data.json(),
+            "body": task_data.model_dump_json(exclude_unset=True),
             "pathParameters": {"taskId": task_id},
-            "headers": dict(request.headers)
+            "headers": dict(request.headers) if request else {}
         }
         result = task_handlers.update_task(event, {})
         return process_handler_response(result)
     except Exception as e:
-        logger.error(f"Update task error: {e}")
-        raise HTTPException(status_code=500, detail="Task update failed")
+        logger.error(f"Error updating task: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update task")
 
 @app.delete(
     "/tasks/{task_id}",
@@ -209,19 +208,21 @@ async def update_task(
         404: {"model": ErrorDetailSchema},
         500: {"model": ErrorDetailSchema}
     },
-    dependencies=[Depends(security_scheme)]
+    dependencies=[Depends(security_scheme)] # Requires authentication
 )
 async def delete_task(
     task_id: str = Path(..., example="60d5ecf3a3b4b5b6c7d8e9f0"),
     request: Request = None
 ):
+    """Deletes a task for the authenticated user."""
     try:
         event = {
             "pathParameters": {"taskId": task_id},
-            "headers": dict(request.headers)
+            "headers": dict(request.headers) if request else {}
         }
         result = task_handlers.delete_task(event, {})
+        # Return the response, ensuring 204 code is handled correctly
         return process_handler_response(result, status.HTTP_204_NO_CONTENT)
     except Exception as e:
-        logger.error(f"Delete task error: {e}")
-        raise HTTPException(status_code=500, detail="Task deletion failed")
+        logger.error(f"Error deleting task: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete task")

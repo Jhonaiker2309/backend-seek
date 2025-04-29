@@ -3,19 +3,13 @@ from typing import Dict, Any, List
 from pydantic import ValidationError
 import json
 
-# Core components
 from core.services.task_service import TaskService
 from core.entities.task import Task, TaskUpdate
 from core.exceptions.task_errors import TaskNotFoundError, TaskPermissionError
+from core.exceptions.auth_errors import AuthenticationError
 
-# Infrastructure components (assuming similar setup as auth_handlers)
 from infrastructure.database.mongo_repositories import MongoTaskRepository
-# You need access to the JWT provider to decode the token
 from infrastructure.auth.jwt_provider import JWTProvider
-# You might need access to the user repository if needed, but likely just JWT provider
-# from infrastructure.database.mongo_repositories import MongoUserRepository
-
-# API Utilities
 from api.utils.responses import success, error
 
 # Setup logging
@@ -25,18 +19,15 @@ logger = logging.getLogger(__name__)
 try:
     task_repository = MongoTaskRepository()
     task_service = TaskService(repository=task_repository)
-    # Initialize JWTProvider - Ensure it uses the same secret as auth_handlers
     jwt_provider = JWTProvider()
 except Exception as setup_error:
     logger.error(f"Error setting up task handlers dependencies: {setup_error}")
-    # Decide how to handle setup errors - maybe raise to prevent handler execution
     raise setup_error
 
 def get_tasks(event: Dict[str, Any], context: Any) -> Dict:
     try:
         # 1. Extract Token from headers
         headers = event.get("headers", {})
-        # Header names might be lowercase in API Gateway event
         auth_header = headers.get("authorization", headers.get("Authorization"))
 
         if not auth_header or not auth_header.startswith("Bearer "):
@@ -72,7 +63,7 @@ def get_tasks(event: Dict[str, Any], context: Any) -> Dict:
 
         return success(200, tasks_data)
 
-    except TaskPermissionError as e: # Catch specific auth errors if raised by service/repo
+    except TaskPermissionError as e:
         logger.warning(f"Authentication error in get_tasks: {e}")
         return error(401, str(e))
     except Exception as e:
@@ -93,8 +84,6 @@ def create_task(event: Dict[str, Any], context: Any) -> Dict:
         if not user_email:
              return error(401, "Invalid token payload")
         logger.info(f"Authenticated user for create_task: {user_email}")
-        # --- End Authentication Check ---
-
         body_str = event.get("body")
         if not body_str:
             return error(400, "Request body is missing")
@@ -103,15 +92,16 @@ def create_task(event: Dict[str, Any], context: Any) -> Dict:
         except json.JSONDecodeError:
             return error(400, "Invalid JSON format")
 
-        # Add user_email to the task data before validation/creation
         body["user_email"] = user_email
+        title = body.get("title")
+        description = body.get("description")
 
         try:
             task_data = Task(**body)
         except ValidationError as e:
             return error(400, f"Validation Error: {e.errors()}")
 
-        new_task = task_service.create_task(task_data)
+        new_task = task_service.create_task(title=title, user_email=user_email, description=description)
 
         # Serialize response
         response_data = new_task.model_dump(exclude={"user_email"}) if hasattr(new_task, 'model_dump') else new_task.dict(exclude={"user_email"})
@@ -159,28 +149,24 @@ def update_task(event: Dict[str, Any], context: Any) -> Dict:
         body.pop("id", None)
 
         try:
-            update_data = TaskUpdate(**body).model_dump(exclude_unset=True) # Pydantic v2
+            update_data = TaskUpdate(**body).model_dump(exclude_unset=True)
         except ValidationError as e:
             return error(400, f"Validation Error: {e.errors()}")
 
-        # Pass user_email for authorization check within the service/repository layer
         updated_task = task_service.update_task(task_id=task_id, updates=update_data, user_email=user_email)
 
         if updated_task is None:
-             # This could be TaskNotFoundError or potentially an authorization failure
-             # The service layer should ideally differentiate. Assuming TaskNotFound for now.
              return error(404, f"Task with id {task_id} not found or not authorized to update.")
 
-        # Serialize response
         response_data = updated_task.model_dump(exclude={"user_email"}) if hasattr(updated_task, 'model_dump') else updated_task.dict(exclude={"user_email"})
-        response_data['id'] = str(updated_task.id)
+        response_data['id'] = task_id
 
         return success(200, response_data)
 
     except TaskNotFoundError:
         return error(404, f"Task with id {task_id} not found.")
-    except AuthenticationError as e: # If service explicitly raises auth error
-        return error(403, str(e)) # 403 Forbidden might be more appropriate here
+    except AuthenticationError as e:
+        return error(403, str(e))
     except ValidationError as e:
          return error(400, f"Update Validation Error: {e.errors()}")
     except Exception as e:
@@ -215,7 +201,7 @@ def delete_task(event: Dict[str, Any], context: Any) -> Dict:
              return error(404, f"Task with id {task_id} not found or not authorized to delete.")
 
         # No body needed for 204 response
-        return success(204, None) # Use status code 204 for successful deletion with no content
+        return success(204, None)
 
     except TaskNotFoundError:
          return error(404, f"Task with id {task_id} not found.")

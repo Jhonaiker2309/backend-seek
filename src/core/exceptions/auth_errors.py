@@ -5,3 +5,7 @@ class UserAlreadyExistsError(Exception):
 class InvalidCredentialsError(Exception):
     def __init__(self):
         super().__init__("Invalid email or password")
+        
+class AuthenticationError(Exception):
+    def __init__(self):
+        super().__init__("Authentication Error")
