@@ -13,13 +13,9 @@ def success(status_code: int, data: Any) -> Dict[str, Any]:
     Returns:
         A dictionary formatted for Lambda Proxy response.
     """
-    # Attempt to serialize the data directly
     try:
         body_content = json.dumps(data)
     except TypeError as e:
-        # If direct serialization fails (e.g., non-serializable objects like ObjectId without encoder)
-        # You could add specific handling here or return a generic internal error.
-        # For now, we return a generic internal server error.
         return error(500, "Internal server error: Failed to serialize response data")
 
     return {
