@@ -13,11 +13,13 @@ Globals:
         DATABASE_NAME: '{{resolve:secretsmanager:prod/task-manager/mongo-config:SecretString:DATABASE_NAME}}'
         JWT_SECRET: '{{resolve:secretsmanager:prod/task-manager/auth-config:SecretString:JWT_SECRET}}'
         API_GATEWAY_BASE_PATH: '{{resolve:secretsmanager:prod/task-manager/mongo-config:SecretString:API_GATEWAY_BASE_PATH}}'
+        FRONTEND_ORIGIN: '{{resolve:secretsmanager:prod/task-manager/app-config:SecretString:FRONTEND_URL}}'
   Api:
     Cors:
       AllowMethods: "'*'"
       AllowHeaders: "'*'"
-      AllowOrigin: "'*'"
+      AllowOrigin: "'{{resolve:secretsmanager:prod/task-manager/app-config:SecretString:FRONTEND_URL}}'"
+      AllowCredentials: "'true'"
 
 Resources:
   TaskManagerAPI:

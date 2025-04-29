@@ -10,11 +10,14 @@ from bson import ObjectId
 from api.handlers import auth_handlers, task_handlers
 from api.schemas.auth_schemas import UserRegisterSchema, UserLoginSchema, AuthResponseSchema, ErrorDetailSchema
 from api.schemas.task_schemas import TaskResponseSchema, TaskCreateSchema, TaskUpdateSchema
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 security_scheme = HTTPBearer()
+
+allowed_origin = os.getenv("FRONTEND_ORIGIN", "*")
 
 app = FastAPI(
     title="Task Manager API",
@@ -33,7 +36,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[allowed_origin],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
